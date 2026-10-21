@@ -66,6 +66,12 @@ html[lang=ru] .hero-content{width:52%}html[lang=ru] h1{letter-spacing:-3px}html[
 @media(hover:none){.btn:hover,.chip:hover,.save:hover{transform:none;box-shadow:none}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.motion-reveal{opacity:1;transform:none!important}.hero-bg{transform:none;scale:1}.hero-name{opacity:.98}*,*::before,*::after{animation:none!important;transition:none!important}.btn:hover,.story-photo:hover img,.card-main:hover .thumb img{transform:none!important}}
 
+
+/* Keep the full navigation inside one opaque header surface. */
+nav,nav.scrolled{background:#0c1b21;height:auto;padding-block:22px;align-items:center}
+nav .links,nav .nav-tools,nav .language-switch{align-items:center}
+nav .nav-tools,nav .language-switch{flex-shrink:0}
+@media(max-width:600px){nav,nav.scrolled{padding-block:18px}}
 </style>
 <!-- Embedded Anton font license:
 Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
