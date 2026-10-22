@@ -1,0 +1,56 @@
+name: Import approved October 2026 portfolio photos
+
+on:
+  push:
+    paths:
+      - Denis-Komarov-PH-18-photos-no-plane-no-train.zip
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-approved-photos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect photo archive
+        id: archive
+        shell: bash
+        run: |
+          if [[ -f Denis-Komarov-PH-18-photos-no-plane-no-train.zip ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Photo archive not present; nothing to import."
+          fi
+
+      - name: Verify unmodified approved archive
+        if: steps.archive.outputs.exists == 'true'
+        shell: bash
+        run: |
+          echo "e65e05a043b89087e8a1105f5d3d9ae3e73c326acf0187f667129fae4f9a8151  Denis-Komarov-PH-18-photos-no-plane-no-train.zip" | sha256sum --check
+
+      - name: Extract and apply verified gallery patch
+        if: steps.archive.outputs.exists == 'true'
+        shell: bash
+        run: |
+          mkdir -p .photo-import
+          unzip -q Denis-Komarov-PH-18-photos-no-plane-no-train.zip -d .photo-import
+          python3 .photo-import/apply_gallery.py --html index.html
+          mkdir -p assets/photos/oct-2026
+          cp .photo-import/assets/photos/oct-2026/*.webp assets/photos/oct-2026/
+          test "$(find assets/photos/oct-2026 -maxdepth 1 -name '*.webp' | wc -l)" -eq 18
+          ! find assets/photos/oct-2026 -type f | grep -Ei '(plane|aircraft|train|rail|tu-154|bernina)'
+
+      - name: Commit gallery update and remove uploaded archive
+        if: steps.archive.outputs.exists == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html assets/photos/oct-2026
+          git rm -f Denis-Komarov-PH-18-photos-no-plane-no-train.zip
+          git commit -m "Add 18 portfolio photos (without aircraft or train)"
+          git push origin HEAD:main
