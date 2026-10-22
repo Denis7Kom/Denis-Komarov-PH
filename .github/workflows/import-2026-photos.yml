@@ -34,17 +34,20 @@ jobs:
         run: |
           echo "e65e05a043b89087e8a1105f5d3d9ae3e73c326acf0187f667129fae4f9a8151  Denis-Komarov-PH-18-photos-no-plane-no-train.zip" | sha256sum --check
 
-      - name: Extract and apply verified gallery patch
+      - name: Extract verified files and filter existing photographs
         if: steps.archive.outputs.exists == 'true'
         shell: bash
         run: |
           mkdir -p .photo-import
           unzip -q Denis-Komarov-PH-18-photos-no-plane-no-train.zip -d .photo-import
-          python3 .photo-import/apply_gallery.py --html index.html
-          mkdir -p assets/photos/oct-2026
-          cp .photo-import/assets/photos/oct-2026/*.webp assets/photos/oct-2026/
-          test "$(find assets/photos/oct-2026 -maxdepth 1 -name '*.webp' | wc -l)" -eq 18
-          ! find assets/photos/oct-2026 -type f | grep -Ei '(plane|aircraft|train|rail|tu-154|bernina)'
+          python3 -m pip install --quiet "Pillow>=10,<12"
+          python3 .github/scripts/skip_existing_photos.py .photo-import/gallery_manifest.json index.html .photo-import
+          if [[ "$(python3 -c 'import json; print(len(json.load(open(".photo-import/gallery_manifest.json"))))')" -gt 0 ]]; then
+            python3 .photo-import/apply_gallery.py --html index.html
+            mkdir -p assets/photos/oct-2026
+            python3 -c 'import json,shutil,pathlib; base=pathlib.Path(".photo-import"); entries=json.loads((base/"gallery_manifest.json").read_text()); [(pathlib.Path(e["image"]).parent.mkdir(parents=True,exist_ok=True),shutil.copy2(base/e["image"],e["image"])) for e in entries]'
+          fi
+          ! find assets/photos -type f | grep -Ei '/oct-2026/.*(plane|aircraft|train|rail|tu-154|bernina)'
 
       - name: Commit gallery update and remove uploaded archive
         if: steps.archive.outputs.exists == 'true'
@@ -52,7 +55,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html assets/photos/oct-2026
+          git add index.html
+          if [[ -d assets/photos/oct-2026 ]]; then git add assets/photos/oct-2026; fi
           git rm -f Denis-Komarov-PH-18-photos-no-plane-no-train.zip
           git commit -m "Add 18 portfolio photos (without aircraft or train)"
           git push origin HEAD:main
