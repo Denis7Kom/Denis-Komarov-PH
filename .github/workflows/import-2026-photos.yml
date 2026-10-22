@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   import-approved-photos:
@@ -54,3 +56,22 @@ jobs:
           git rm -f Denis-Komarov-PH-18-photos-no-plane-no-train.zip
           git commit -m "Add 18 portfolio photos (without aircraft or train)"
           git push origin HEAD:main
+
+      - name: Assemble published site
+        if: steps.archive.outputs.exists == 'true'
+        shell: bash
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+          cp -a assets _site/assets
+
+      - name: Upload site artifact
+        if: steps.archive.outputs.exists == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy updated gallery
+        if: steps.archive.outputs.exists == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4
