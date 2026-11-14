@@ -1,4 +1,4 @@
-const projectVersion = "1.0.0";
+const projectVersion = "1.0.1";
 const badge = document.createElement("span");
 badge.className = "project-version";
 badge.textContent = "ver. " + projectVersion;
