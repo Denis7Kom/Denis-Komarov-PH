@@ -34,3 +34,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         if: steps.version.outputs.released == 'true' || github.event_name == 'workflow_dispatch'
         run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
+      - name: Publish portfolio release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat VERSION)
+          if [ "$version" = 1.0.1 ]; then exit 0; fi
+          tag="v$version"
+          target=$(git log --first-parent -1 --format=%H -- VERSION)
+          test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$target"
+          git show "$target:index.html" | grep -F 'src="./version-badge.js"' >/dev/null
+          git show "$target:version-badge.js" | grep -F "const projectVersion = \"$version\";" >/dev/null
+          notes=$(mktemp)
+          git show "$target:CHANGELOG.md" | awk -v version="$version" '
+            /^## / { if (found) exit; found = ($2 == version); next }
+            found { print }
+          ' > "$notes"
+          grep -q '[^[:space:]]' "$notes"
+          if gh release view "$tag" >/dev/null 2>&1; then exit 0; fi
+          flags=()
+          if [[ "$version" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$tag" --verify-tag --title "$tag" --notes-file "$notes" "${flags[@]}"
