@@ -1,0 +1,75 @@
+name: Release smoke test
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  release-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract release command
+        run: |
+          ruby -ryaml -e '
+            workflow = YAML.load_file(ARGV[0])
+            step = workflow.fetch("jobs").values.flat_map { |job| job.fetch("steps") }
+                           .find { |item| item["name"] == ARGV[1] }
+            puts step.fetch("run")
+          ' .github/workflows/version.yml "Publish portfolio release" > "$RUNNER_TEMP/release-step.sh"
+      - name: Exercise release command without GitHub writes
+        run: |
+          bash -n "$RUNNER_TEMP/release-step.sh"
+          mkdir "$RUNNER_TEMP/fake-bin"
+          export PATH="$RUNNER_TEMP/fake-bin:$PATH"
+          cat > "$RUNNER_TEMP/fake-bin/gh" <<'EOF'
+          #!/bin/bash
+          set -eu
+          case "$1 $2" in
+            'release view') test -f "$RUNNER_TEMP/published" ;;
+            'release create')
+              test "$3" = v9.0.1
+              shift 3
+              expected_prerelease=false
+              prerelease=false
+              if [ "$1" = --verify-tag ]; then shift; else exit 1; fi
+              if [ "$1" = --prerelease ]; then prerelease=true; shift; fi
+              test "$prerelease" = "$expected_prerelease"
+              test "$1" = --title
+              test "$3" = --notes-file
+              grep -Fx -- '- fix: test release' "$4"
+              test ! -e "$RUNNER_TEMP/published"
+              touch "$RUNNER_TEMP/published"
+              ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          printf '#!/bin/bash\nexit 0\n' > "$RUNNER_TEMP/fake-bin/unused"
+          chmod +x "$RUNNER_TEMP"/fake-bin/*
+          mkdir "$RUNNER_TEMP/fixture"
+          cd "$RUNNER_TEMP/fixture"
+          git init -q -b main
+          git config user.name 'Release Test'
+          git config user.email 'release-test@example.invalid'
+          printf '%s\n' '1.0.1' > VERSION
+          git add VERSION
+          git commit -qm baseline
+          bash -eo pipefail "$RUNNER_TEMP/release-step.sh"
+          test ! -e "$RUNNER_TEMP/published"
+          printf '%s\n' '9.0.1' > VERSION
+          printf '# Changelog\n\n## 9.0.1 — 2026-11-19\n\n- fix: test release\n' > CHANGELOG.md
+          printf '%s\n' '<script type="module" src="./version-badge.js"></script>' > index.html
+          printf '%s\n' 'const projectVersion = "9.0.1";' > version-badge.js
+          git add .
+          git commit -qm 'chore(release): 9.0.1'
+          release_commit=$(git rev-parse HEAD)
+          git tag 'v9.0.1' HEAD^
+          if bash -eo pipefail "$RUNNER_TEMP/release-step.sh"; then exit 1; fi
+          test ! -e "$RUNNER_TEMP/published"
+          git tag -d 'v9.0.1'
+          git tag 'v9.0.1' "$release_commit"
+          git commit --allow-empty -qm 'docs: follow-up commit'
+          bash -eo pipefail "$RUNNER_TEMP/release-step.sh"
+          test -f "$RUNNER_TEMP/published"
+          bash -eo pipefail "$RUNNER_TEMP/release-step.sh"
